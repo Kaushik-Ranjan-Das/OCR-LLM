@@ -40,7 +40,7 @@ with st.sidebar:
         index=0  # Default to Llama 3.2 Vision
     )
     '''
-    ocr_method == "Llama 3.2 Vision"
+    ocr_method = "Llama 3.2 Vision"
     if ocr_method == "Llama 3.2 Vision":
         llama_model = st.selectbox(
             "Select Llama Model",
