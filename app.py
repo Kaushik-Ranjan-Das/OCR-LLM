@@ -53,7 +53,7 @@ with st.sidebar:
             st.warning("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
             st.code("export TOGETHER_API_KEY='your_api_key_here'")
         else:
-            st.success("✓ Together AI API key found in environment variables")
+            st.success("You may run out of the budget of free usage. But you should not stop trying")
 
 # Define preprocessing function
 def preprocess_image(image):
