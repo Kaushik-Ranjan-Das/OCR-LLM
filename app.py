@@ -33,13 +33,7 @@ with st.sidebar:
     st.success("""
     **Llama 3.2 Vision** provides the most accurate insurance card text extraction with structured output.
     """)
-    '''
-    ocr_method = st.radio(
-        "Select OCR Method",
-        ["Llama 3.2 Vision", "EasyOCR", "PaddleOCR"],
-        index=0  # Default to Llama 3.2 Vision
-    )
-    '''
+   
     ocr_method = "Llama 3.2 Vision"
     if ocr_method == "Llama 3.2 Vision":
         llama_model = st.selectbox(
