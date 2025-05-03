@@ -26,7 +26,7 @@ st.title("Insurance Card OCR")
 with st.sidebar:
     st.info("Upload an insurance card image to extract text using OCR.")
     
-    st.subheader("OCR Model Selection")
+    st.subheader("OCR Selection")
     
     # Highlighted recommendation box for Llama model
     st.write("✨ **Recommended Method** ✨")
