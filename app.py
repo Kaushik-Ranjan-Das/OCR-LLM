@@ -35,13 +35,8 @@ with st.sidebar:
     """)
    
     ocr_method = "Llama 3.2 Vision"
-    if ocr_method == "Llama 3.2 Vision":
-        llama_model = st.selectbox(
-            "Select Llama Model",
-            ["Llama-3.2-90B-Vision", "Llama-3.2-11B-Vision", "free"],
-            index=0  # Default to 90B
-        )
-        
+    ocr_method = "Llama-3.2-90B-Vision"
+          
         # Check for API key in environment variables only
         together_api_key = os.environ.get('TOGETHER_API_KEY')
         if not together_api_key:
