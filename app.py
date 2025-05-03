@@ -39,12 +39,6 @@ with st.sidebar:
           
         # Check for API key in environment variables only
         together_api_key = os.environ.get('TOGETHER_API_KEY')
-        if not together_api_key:
-            st.warning("API_KEY not found in environment variables. Please set it before running the app.")
-            st.code("export API_KEY='your_api_key_here'")
-        else:
-            st.success("You may run out of the budget of free usage. But you should not stop trying")
-
 # Define preprocessing function
 def preprocess_image(image):
     img_array = np.array(image)
