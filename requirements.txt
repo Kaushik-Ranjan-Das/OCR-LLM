@@ -5,3 +5,5 @@ numpy
 easyocr
 paddlepaddle
 paddleocr
+requests
+python-dotenv
