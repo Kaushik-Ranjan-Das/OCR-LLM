@@ -38,7 +38,7 @@ with st.sidebar:
     ocr_method = "Llama-3.2-90B-Vision"
           
         # Check for API key in environment variables only
-        together_api_key = os.environ.get('TOGETHER_API_KEY')
+    together_api_key = os.environ.get('TOGETHER_API_KEY')
 # Define preprocessing function
 def preprocess_image(image):
     img_array = np.array(image)
