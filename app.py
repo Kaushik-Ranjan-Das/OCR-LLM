@@ -31,7 +31,7 @@ with st.sidebar:
     # Highlighted recommendation box for Llama model
     st.write("✨ **Recommended Method** ✨")
     st.success("""
-    **Llama 3.2 Vision** provides the most accurate insurance card text extraction with structured output.
+    **Note that we are using an open source model and have limited free access API key. Please contact kaushikranjan@gmail.com if the app does not work for you
     """)
    
     ocr_method = "Llama 3.2 Vision"
