@@ -11,7 +11,7 @@ import json
 # Set page configuration
 st.set_page_config(
     page_title="Insurance Card OCR",
-    page_icon="📷",
+    page_icon=":camera:",
     layout="wide"
 )
 
@@ -49,61 +49,53 @@ def preprocess_image(image):
 
 # Function to process image with Llama Vision model
 def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
-    # Convert image to base64
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG")
-    img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    
-    # Determine which model to use
-    vision_llm = f"meta-llama/{model}-Instruct-Turbo" if model != "free" else "meta-llama/Llama-Vision-Free"
-    
-    # System prompt for OCR
-    system_prompt = """
-    Extract and organize all text from this insurance card image. Identify and label key information such as:
-    - Member name
-    - Member ID number
-    - Group number
-    - Plan type
-    - Issuer/Insurance company
-    - Contact information
-    - Copay/deductible information
-    - Prescription information
-    - Any other relevant details
-    
-    Format the information clearly and organize it logically. If any field is unclear or not present, indicate that.
-    """
-    
-    # Prepare API request
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "model": vision_llm,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": system_prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
-                ]
-            }
-        ]
-    }
-    
-    # Make API request
     try:
+        # Convert image to base64
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG")
+        img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        # Determine which model to use
+        vision_llm = f"meta-llama/{model}-Instruct-Turbo" if model != "free" else "meta-llama/Llama-Vision-Free"
+        
+        # System prompt for OCR - using a simple ASCII-only prompt to avoid encoding issues
+        system_prompt = "Extract and organize all text from this insurance card image. Identify key information such as member name, ID number, group number, plan type, issuer, contact information, and any other relevant details. Format the information clearly."
+        
+        # Prepare API request
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Create a simplified payload with ASCII-only characters
+        payload = {
+            "model": vision_llm,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": system_prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
+                    ]
+                }
+            ]
+        }
+        
+        # Convert payload to JSON with ASCII encoding
+        json_payload = json.dumps(payload, ensure_ascii=True)
+        
+        # Make API request
         response = requests.post(
             "https://api.together.xyz/v1/chat/completions",
             headers=headers,
-            json=payload
+            data=json_payload
         )
         response.raise_for_status()  # Raise exception for HTTP errors
         
         result = response.json()
         return result["choices"][0]["message"]["content"]
     except Exception as e:
+        st.error(f"Full error: {str(e)}")
         return f"Error processing with Llama Vision: {str(e)}"
 
 # Create the file uploader
