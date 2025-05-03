@@ -7,6 +7,10 @@ import base64
 import os
 import io
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Set page configuration
 st.set_page_config(
@@ -20,25 +24,35 @@ st.title("Insurance Card OCR")
 # Add a sidebar with information
 with st.sidebar:
     st.info("Upload an insurance card image to extract text using OCR.")
+    
     st.subheader("OCR Model Selection")
+    
+    # Highlighted recommendation box for Llama model
+    st.write("✨ **Recommended Method** ✨")
+    st.success("""
+    **Llama 3.2 Vision** provides the most accurate insurance card text extraction with structured output.
+    """)
+    
     ocr_method = st.radio(
         "Select OCR Method",
-        ["Llama 3.2 Vision", "EasyOCR", "PaddleOCR"]
+        ["Llama 3.2 Vision", "EasyOCR", "PaddleOCR"],
+        index=0  # Default to Llama 3.2 Vision
     )
     
     if ocr_method == "Llama 3.2 Vision":
         llama_model = st.selectbox(
             "Select Llama Model",
-            ["Llama-3.2-90B-Vision", "Llama-3.2-11B-Vision", "free"]
+            ["Llama-3.2-90B-Vision", "Llama-3.2-11B-Vision", "free"],
+            index=0  # Default to 90B
         )
         
-        # API key input (could use st.secrets in production)
-        together_api_key = st.text_input("Together AI API Key", type="password")
+        # Check for API key in environment variables only
+        together_api_key = os.environ.get('TOGETHER_API_KEY')
         if not together_api_key:
-            st.warning("Please enter your Together AI API key")
-            if 'TOGETHER_API_KEY' in os.environ:
-                together_api_key = os.environ['TOGETHER_API_KEY']
-                st.success("Using API key from environment variable")
+            st.warning("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
+            st.code("export TOGETHER_API_KEY='your_api_key_here'")
+        else:
+            st.success("✓ Together AI API key found in environment variables")
 
 # Define preprocessing function
 def preprocess_image(image):
@@ -58,8 +72,33 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
         # Determine which model to use
         vision_llm = f"meta-llama/{model}-Instruct-Turbo" if model != "free" else "meta-llama/Llama-Vision-Free"
         
-        # System prompt for OCR - using a simple ASCII-only prompt to avoid encoding issues
-        system_prompt = "Extract and organize all text from this insurance card image. Identify key information such as member name, ID number, group number, plan type, issuer, contact information, and any other relevant details. Format the information clearly."
+        # System prompt for OCR - structured for table output
+        system_prompt = """
+        Extract all text from this insurance card image and organize it into a structured format.
+        
+        Format your response as a clear table with two columns:
+        1. Field name (e.g., "Insurance Company", "Member ID", etc.)
+        2. Value extracted from the card
+        
+        Include all relevant fields such as:
+        - Insurance Company/Plan Name
+        - Member Name
+        - Member ID/Identification Number
+        - Group Number
+        - Plan Type/Plan ID
+        - Effective Date
+        - Expiration Date
+        - PCP Copay
+        - Specialist Copay
+        - Emergency Room Copay
+        - Prescription Information
+        - Customer Service Phone Numbers
+        - Claims Address
+        - Website
+        
+        For any field where information is not visible or not present on the card, indicate "Not found" as the value.
+        Present the information in markdown table format for clear readability.
+        """
         
         # Prepare API request
         headers = {
@@ -67,7 +106,7 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             "Content-Type": "application/json"
         }
         
-        # Create a simplified payload with ASCII-only characters
+        # Create payload 
         payload = {
             "model": vision_llm,
             "messages": [
@@ -93,7 +132,33 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
         response.raise_for_status()  # Raise exception for HTTP errors
         
         result = response.json()
-        return result["choices"][0]["message"]["content"]
+        response_content = result["choices"][0]["message"]["content"]
+        
+        # Make sure response has a table format, add if missing
+        if "| Field | Value |" not in response_content and "| --- | --- |" not in response_content:
+            # Parse the content and convert to table if needed
+            lines = response_content.strip().split('\n')
+            table_content = "| Field | Value |\n| --- | --- |\n"
+            
+            current_field = ""
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Check if line has a field:value pattern
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    field = parts[0].strip()
+                    value = parts[1].strip() if len(parts) > 1 else "Not found"
+                    table_content += f"| {field} | {value} |\n"
+                else:
+                    # Add as additional information
+                    table_content += f"| Additional Info | {line} |\n"
+            
+            return table_content
+        
+        return response_content
     except Exception as e:
         st.error(f"Full error: {str(e)}")
         return f"Error processing with Llama Vision: {str(e)}"
@@ -126,9 +191,9 @@ if uploaded_file is not None:
         
         # Process with selected OCR method
         if ocr_method == "Llama 3.2 Vision":
-            if st.button("Process with Llama Vision"):
+            if st.button("Process with Llama Vision", type="primary"):
                 if not together_api_key:
-                    st.error("Please provide a Together AI API key in the sidebar")
+                    st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
                 else:
                     with st.spinner("Processing with Llama Vision..."):
                         result = process_with_llama_vision(image_to_ocr, together_api_key, llama_model)
@@ -144,10 +209,11 @@ if uploaded_file is not None:
                         results = reader.readtext(image_np, detail=0)
                         
                         if results:
-                            markdown_output = ""
+                            # Format results as a table
+                            table_content = "| Text Detected |\n| --- |\n"
                             for text in results:
-                                markdown_output += f"- {text}\n"
-                            st.markdown(markdown_output)
+                                table_content += f"| {text} |\n"
+                            st.markdown(table_content)
                         else:
                             st.warning("No text detected. Try adjusting the image or using a different OCR method.")
                     except Exception as e:
@@ -164,15 +230,16 @@ if uploaded_file is not None:
                         results = ocr.ocr(image_cv, cls=True)
                         
                         if results and any(results):
-                            markdown_output = ""
+                            # Format results as a table
+                            table_content = "| Text Detected | Confidence |\n| --- | --- |\n"
                             for line in results:
                                 if line:  # Check if line is not empty
                                     for word_info in line:
                                         if isinstance(word_info, list) and len(word_info) > 1:
                                             text = word_info[1][0]  # Updated to handle PaddleOCR's output structure
                                             confidence = word_info[1][1]
-                                            markdown_output += f"- {text} (Confidence: {confidence:.2f})\n"
-                            st.markdown(markdown_output)
+                                            table_content += f"| {text} | {confidence:.2f} |\n"
+                            st.markdown(table_content)
                         else:
                             st.warning("No text detected. Try adjusting the image or using a different OCR method.")
                     except Exception as e:
