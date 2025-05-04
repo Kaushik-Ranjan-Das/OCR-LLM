@@ -20,7 +20,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Insurance Card OCR")
+st.title("Insurance Card Reader")
 
 # Add a sidebar with information
 with st.sidebar:
@@ -92,7 +92,6 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
         - PCP Copay
         - Specialist Copay
         - Emergency Room Copay
-        - Prescription Information
         - Customer Service Phone Numbers
         - Claims Address
         - Website
