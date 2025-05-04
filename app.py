@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-# Correctly set the API key
-TOGETHER_API_KEY = "5eae8fec1b3c9df67e61157cf2c6808ae8f4d68a8a8d0747a9da6d66bbc681c7"
+TOGETHER_API_KEY: "5eae8fec1b3c9df67e61157cf2c6808ae8f4d68a8a8d0747a9da6d66bbc681c7"
 
 # Set page configuration
 st.set_page_config(
@@ -27,7 +26,7 @@ st.title("Insurance Card OCR")
 with st.sidebar:
     st.info("Upload an insurance card image to extract text using OCR.")
     
-    st.subheader("OCR Selection")
+    st.subheader("OCR Model Selection")
     
     # Highlighted recommendation box for Llama model
     st.write("✨ **Recommended Method** ✨")
@@ -35,12 +34,11 @@ with st.sidebar:
     **Note that we are using an open source model and have limited free access API key. Please contact kaushikranjan@gmail.com if the app does not work for you
     """)
    
-    # Fixed: Use the correct model identifier
-    llama_model = "Llama-3.1-8B-Vision"  # Changed to a model that's likely available
+    ocr_method = "Llama 3.2 Vision"
+    ocr_method = "Llama-3.2-90B-Vision"
           
-# Use the hardcoded API key if environment variable isn't available
-together_api_key = os.environ.get('TOGETHER_API_KEY', TOGETHER_API_KEY)
-
+        # Check for API key in environment variables only
+    together_api_key = os.environ.get('TOGETHER_API_KEY')
 # Define preprocessing function
 def preprocess_image(image):
     img_array = np.array(image)
@@ -49,25 +47,18 @@ def preprocess_image(image):
     return Image.fromarray(thresh)
 
 # Function to process image with Llama Vision model
-def process_with_llama_vision(image, api_key, model):
+def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
     try:
         # Convert image to base64
         buffer = io.BytesIO()
-        # Convert RGBA to RGB if needed
-        if image.mode == 'RGBA':
-            image = image.convert('RGB')
         image.save(buffer, format="JPEG")
         img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
-        # Set the model correctly - meta-llama or different prefix may be needed
-        # Try different model identifiers if this one doesn't work
-        vision_llm = model
-        
-        # Debug model name
-        st.write(f"Using model: {vision_llm}")
+        # Determine which model to use
+        vision_llm = f"meta-llama/{model}-Instruct-Turbo" if model != "free" else "meta-llama/Llama-Vision-Free"
         
         # System prompt for OCR - structured for table output
-        user_prompt = """
+        system_prompt = """
         Extract all text from this insurance card image and organize it into a structured format.
         
         Format your response as a clear table with two columns:
@@ -100,36 +91,22 @@ def process_with_llama_vision(image, api_key, model):
             "Content-Type": "application/json"
         }
         
-        # Create payload - adjust based on Together.ai's API
+        # Create payload 
         payload = {
             "model": vision_llm,
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": user_prompt},
+                        {"type": "text", "text": system_prompt},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
                     ]
                 }
-            ],
-            "temperature": 0.2,  # Lower temperature for more deterministic output
-            "max_tokens": 1024    # Ensure enough tokens for the response
+            ]
         }
         
         # Convert payload to JSON with ASCII encoding
         json_payload = json.dumps(payload, ensure_ascii=True)
-        
-        # Show the request payload for debugging (without the image data)
-        debug_payload = payload.copy()
-        if "messages" in debug_payload and len(debug_payload["messages"]) > 0:
-            for msg in debug_payload["messages"]:
-                if "content" in msg and isinstance(msg["content"], list):
-                    for i, content_item in enumerate(msg["content"]):
-                        if isinstance(content_item, dict) and "image_url" in content_item:
-                            msg["content"][i]["image_url"]["url"] = "[BASE64_IMAGE_DATA]"
-        
-        st.write("Request payload structure:")
-        st.json(debug_payload)
         
         # Make API request
         response = requests.post(
@@ -137,25 +114,9 @@ def process_with_llama_vision(image, api_key, model):
             headers=headers,
             data=json_payload
         )
+        response.raise_for_status()  # Raise exception for HTTP errors
         
-        # Add debug information
-        st.write(f"API Status Code: {response.status_code}")
-        
-        # Check for error response and display details
-        if response.status_code != 200:
-            st.error(f"API Error: {response.status_code}")
-            st.error(f"Response: {response.text}")
-            return f"Error: API returned status code {response.status_code}. Response: {response.text}"
-        
-        # Parse the response
         result = response.json()
-        st.write("API Response structure:")
-        
-        # Create a safe copy of the response for display
-        safe_result = result.copy()
-        st.json(safe_result)
-        
-        # Extract the content from the response
         response_content = result["choices"][0]["message"]["content"]
         
         # Make sure response has a table format, add if missing
@@ -164,6 +125,7 @@ def process_with_llama_vision(image, api_key, model):
             lines = response_content.strip().split('\n')
             table_content = "| Field | Value |\n| --- | --- |\n"
             
+            current_field = ""
             for line in lines:
                 line = line.strip()
                 if not line:
@@ -186,42 +148,8 @@ def process_with_llama_vision(image, api_key, model):
         st.error(f"Full error: {str(e)}")
         return f"Error processing with Llama Vision: {str(e)}"
 
-# Function to list available models from Together API
-def list_available_models(api_key):
-    try:
-        headers = {
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        response = requests.get(
-            "https://api.together.xyz/v1/models",
-            headers=headers
-        )
-        
-        if response.status_code == 200:
-            models = response.json()
-            vision_models = [m for m in models["data"] if "vision" in m["id"].lower() or "llava" in m["id"].lower()]
-            return vision_models
-        else:
-            return []
-    except Exception as e:
-        st.error(f"Error listing models: {str(e)}")
-        return []
-
 # Create the file uploader
 uploaded_file = st.file_uploader("Upload an insurance card image", type=["jpg", "jpeg", "png"])
-
-# Show available models in sidebar
-with st.sidebar:
-    st.subheader("Available Models")
-    if st.button("Check Available Vision Models"):
-        vision_models = list_available_models(together_api_key)
-        if vision_models:
-            st.write("Available vision models:")
-            for model in vision_models:
-                st.write(f"- {model['id']}")
-        else:
-            st.write("Could not retrieve models or no vision models found.")
 
 # Main app logic
 if uploaded_file is not None:
@@ -246,23 +174,62 @@ if uploaded_file is not None:
         
         st.subheader("OCR Result:")
         
-        # Allow custom model input
-        custom_model = st.text_input("Enter model ID (leave empty to use default)", 
-                                    value=llama_model)
-        if custom_model:
-            model_to_use = custom_model
-        else:
-            model_to_use = llama_model
-            
-        # Process with Llama Vision
-        if st.button("Process with Vision Model", type="primary"):
-            if not together_api_key:
-                st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
-            else:
-                with st.spinner(f"Processing with model {model_to_use}..."):
-                    result = process_with_llama_vision(image_to_ocr, together_api_key, model_to_use)
-                    st.markdown(result)
-                    
+        # Process with selected OCR method
+        if ocr_method == "Llama 3.2 Vision":
+            if st.button("Process with Llama Vision", type="primary"):
+                if not together_api_key:
+                    st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
+                else:
+                    with st.spinner("Processing with Llama Vision..."):
+                        result = process_with_llama_vision(image_to_ocr, together_api_key, llama_model)
+                        st.markdown(result)
+        
+        elif ocr_method == "EasyOCR":
+            if st.button("Process with EasyOCR"):
+                with st.spinner("Processing with EasyOCR..."):
+                    try:
+                        image_np = np.array(image_to_ocr)
+                        import easyocr
+                        reader = easyocr.Reader(['en'])
+                        results = reader.readtext(image_np, detail=0)
+                        
+                        if results:
+                            # Format results as a table
+                            table_content = "| Text Detected |\n| --- |\n"
+                            for text in results:
+                                table_content += f"| {text} |\n"
+                            st.markdown(table_content)
+                        else:
+                            st.warning("No text detected. Try adjusting the image or using a different OCR method.")
+                    except Exception as e:
+                        st.error(f"Error during EasyOCR processing: {e}")
+        
+        elif ocr_method == "PaddleOCR":
+            if st.button("Process with PaddleOCR"):
+                with st.spinner("Processing with PaddleOCR..."):
+                    try:
+                        image_np = np.array(image_to_ocr)
+                        image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+                        from paddleocr import PaddleOCR
+                        ocr = PaddleOCR(use_angle_cls=True, lang='en')
+                        results = ocr.ocr(image_cv, cls=True)
+                        
+                        if results and any(results):
+                            # Format results as a table
+                            table_content = "| Text Detected | Confidence |\n| --- | --- |\n"
+                            for line in results:
+                                if line:  # Check if line is not empty
+                                    for word_info in line:
+                                        if isinstance(word_info, list) and len(word_info) > 1:
+                                            text = word_info[1][0]  # Updated to handle PaddleOCR's output structure
+                                            confidence = word_info[1][1]
+                                            table_content += f"| {text} | {confidence:.2f} |\n"
+                            st.markdown(table_content)
+                        else:
+                            st.warning("No text detected. Try adjusting the image or using a different OCR method.")
+                    except Exception as e:
+                        st.error(f"Error during PaddleOCR processing: {e}")
+    
     except Exception as e:
         st.error(f"An error occurred: {e}")
         st.info("Please ensure you've uploaded a valid image file.")
