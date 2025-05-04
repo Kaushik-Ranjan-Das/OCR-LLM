@@ -15,7 +15,7 @@ load_dotenv()
 
 # Set page configuration
 st.set_page_config(
-    page_title="Insurance Card OCR",
+    page_title="Making sense of insurance cards",
     page_icon=":camera:",
     layout="wide"
 )
