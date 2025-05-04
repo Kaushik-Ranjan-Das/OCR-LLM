@@ -20,7 +20,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Insurance Card Reader")
+st.title("Card Reader")
 
 # Add a sidebar with information
 with st.sidebar:
