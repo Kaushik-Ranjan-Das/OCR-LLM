@@ -20,7 +20,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Card Reader")
+st.title("Insurance Card Reader")
 
 # Add a sidebar with information
 with st.sidebar:
@@ -187,7 +187,7 @@ if uploaded_file is not None:
         else:
             image_to_ocr = image
         
-        st.subheader("OCR Result:")
+        st.subheader("Results:")
         
         # Process with selected OCR method
         if ocr_method == "Llama 3.2 Vision":
