@@ -35,8 +35,8 @@ with st.sidebar:
     **Note that we are using an open source model and have limited free access API key. Please contact kaushikranjan@gmail.com if the app does not work for you
     """)
    
-    # Fixed: Set the model variable correctly
-    llama_model = "Llama-3.2-90B-Vision"
+    # Fixed: Use the correct model identifier
+    llama_model = "Llama-3.1-8B-Vision"  # Changed to a model that's likely available
           
 # Use the hardcoded API key if environment variable isn't available
 together_api_key = os.environ.get('TOGETHER_API_KEY', TOGETHER_API_KEY)
@@ -49,18 +49,25 @@ def preprocess_image(image):
     return Image.fromarray(thresh)
 
 # Function to process image with Llama Vision model
-def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
+def process_with_llama_vision(image, api_key, model):
     try:
         # Convert image to base64
         buffer = io.BytesIO()
+        # Convert RGBA to RGB if needed
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
         image.save(buffer, format="JPEG")
         img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
-        # Determine which model to use
-        vision_llm = f"meta-llama/{model}" if model != "free" else "meta-llama/Llama-Vision-Free"
+        # Set the model correctly - meta-llama or different prefix may be needed
+        # Try different model identifiers if this one doesn't work
+        vision_llm = model
+        
+        # Debug model name
+        st.write(f"Using model: {vision_llm}")
         
         # System prompt for OCR - structured for table output
-        system_prompt = """
+        user_prompt = """
         Extract all text from this insurance card image and organize it into a structured format.
         
         Format your response as a clear table with two columns:
@@ -93,28 +100,36 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             "Content-Type": "application/json"
         }
         
-        # Create payload 
+        # Create payload - adjust based on Together.ai's API
         payload = {
             "model": vision_llm,
             "messages": [
                 {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
                     "role": "user",
                     "content": [
+                        {"type": "text", "text": user_prompt},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
                     ]
                 }
-            ]
+            ],
+            "temperature": 0.2,  # Lower temperature for more deterministic output
+            "max_tokens": 1024    # Ensure enough tokens for the response
         }
-        
-        # Add debug information
-        st.write(f"Using model: {vision_llm}")
         
         # Convert payload to JSON with ASCII encoding
         json_payload = json.dumps(payload, ensure_ascii=True)
+        
+        # Show the request payload for debugging (without the image data)
+        debug_payload = payload.copy()
+        if "messages" in debug_payload and len(debug_payload["messages"]) > 0:
+            for msg in debug_payload["messages"]:
+                if "content" in msg and isinstance(msg["content"], list):
+                    for i, content_item in enumerate(msg["content"]):
+                        if isinstance(content_item, dict) and "image_url" in content_item:
+                            msg["content"][i]["image_url"]["url"] = "[BASE64_IMAGE_DATA]"
+        
+        st.write("Request payload structure:")
+        st.json(debug_payload)
         
         # Make API request
         response = requests.post(
@@ -132,9 +147,15 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             st.error(f"Response: {response.text}")
             return f"Error: API returned status code {response.status_code}. Response: {response.text}"
         
-        response.raise_for_status()  # Raise exception for HTTP errors
-        
+        # Parse the response
         result = response.json()
+        st.write("API Response structure:")
+        
+        # Create a safe copy of the response for display
+        safe_result = result.copy()
+        st.json(safe_result)
+        
+        # Extract the content from the response
         response_content = result["choices"][0]["message"]["content"]
         
         # Make sure response has a table format, add if missing
@@ -143,7 +164,6 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             lines = response_content.strip().split('\n')
             table_content = "| Field | Value |\n| --- | --- |\n"
             
-            current_field = ""
             for line in lines:
                 line = line.strip()
                 if not line:
@@ -166,8 +186,42 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
         st.error(f"Full error: {str(e)}")
         return f"Error processing with Llama Vision: {str(e)}"
 
+# Function to list available models from Together API
+def list_available_models(api_key):
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+        
+        response = requests.get(
+            "https://api.together.xyz/v1/models",
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            models = response.json()
+            vision_models = [m for m in models["data"] if "vision" in m["id"].lower() or "llava" in m["id"].lower()]
+            return vision_models
+        else:
+            return []
+    except Exception as e:
+        st.error(f"Error listing models: {str(e)}")
+        return []
+
 # Create the file uploader
 uploaded_file = st.file_uploader("Upload an insurance card image", type=["jpg", "jpeg", "png"])
+
+# Show available models in sidebar
+with st.sidebar:
+    st.subheader("Available Models")
+    if st.button("Check Available Vision Models"):
+        vision_models = list_available_models(together_api_key)
+        if vision_models:
+            st.write("Available vision models:")
+            for model in vision_models:
+                st.write(f"- {model['id']}")
+        else:
+            st.write("Could not retrieve models or no vision models found.")
 
 # Main app logic
 if uploaded_file is not None:
@@ -192,13 +246,21 @@ if uploaded_file is not None:
         
         st.subheader("OCR Result:")
         
+        # Allow custom model input
+        custom_model = st.text_input("Enter model ID (leave empty to use default)", 
+                                    value=llama_model)
+        if custom_model:
+            model_to_use = custom_model
+        else:
+            model_to_use = llama_model
+            
         # Process with Llama Vision
-        if st.button("Process with Llama Vision", type="primary"):
+        if st.button("Process with Vision Model", type="primary"):
             if not together_api_key:
                 st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
             else:
-                with st.spinner("Processing with Llama Vision..."):
-                    result = process_with_llama_vision(image_to_ocr, together_api_key, llama_model)
+                with st.spinner(f"Processing with model {model_to_use}..."):
+                    result = process_with_llama_vision(image_to_ocr, together_api_key, model_to_use)
                     st.markdown(result)
                     
     except Exception as e:
