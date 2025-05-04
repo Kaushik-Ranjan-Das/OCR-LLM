@@ -33,12 +33,28 @@ with st.sidebar:
     st.success("""
     **Llama 3.2 Vision** provides the most accurate insurance card text extraction with structured output.
     """)
-   
-    ocr_method = "Llama 3.2 Vision"
-    ocr_method = "Llama-3.2-90B-Vision"
-          
+    
+    ocr_method = st.radio(
+        "Select OCR Method",
+        ["Llama 3.2 Vision", "EasyOCR", "PaddleOCR"],
+        index=0  # Default to Llama 3.2 Vision
+    )
+    
+    if ocr_method == "Llama 3.2 Vision":
+        llama_model = st.selectbox(
+            "Select Llama Model",
+            ["Llama-3.2-90B-Vision", "Llama-3.2-11B-Vision", "free"],
+            index=0  # Default to 90B
+        )
+        
         # Check for API key in environment variables only
-    together_api_key = os.environ.get('TOGETHER_API_KEY')
+        together_api_key = os.environ.get('TOGETHER_API_KEY')
+        if not together_api_key:
+            st.warning("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
+            st.code("export TOGETHER_API_KEY='your_api_key_here'")
+        else:
+            st.success("You may run out of the budget of free usage. But you should not stop trying")
+
 # Define preprocessing function
 def preprocess_image(image):
     img_array = np.array(image)
