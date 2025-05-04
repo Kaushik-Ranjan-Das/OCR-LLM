@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-TOGETHER_API_KEY: "5eae8fec1b3c9df67e61157cf2c6808ae8f4d68a8a8d0747a9da6d66bbc681c7"
+
 
 # Set page configuration
 st.set_page_config(
