@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-TOGETHER_API_KEY: "5eae8fec1b3c9df67e61157cf2c6808ae8f4d68a8a8d0747a9da6d66bbc681c7"
+# Correctly set the API key
+TOGETHER_API_KEY = "5eae8fec1b3c9df67e61157cf2c6808ae8f4d68a8a8d0747a9da6d66bbc681c7"
 
 # Set page configuration
 st.set_page_config(
@@ -34,11 +35,12 @@ with st.sidebar:
     **Note that we are using an open source model and have limited free access API key. Please contact kaushikranjan@gmail.com if the app does not work for you
     """)
    
-    ocr_method = "Llama 3.2 Vision"
-    ocr_method = "Llama-3.2-90B-Vision"
+    # Fixed: Set the model variable correctly
+    llama_model = "Llama-3.2-90B-Vision"
           
-        # Check for API key in environment variables only
-    together_api_key = os.environ.get('TOGETHER_API_KEY')
+# Use the hardcoded API key if environment variable isn't available
+together_api_key = os.environ.get('TOGETHER_API_KEY', TOGETHER_API_KEY)
+
 # Define preprocessing function
 def preprocess_image(image):
     img_array = np.array(image)
@@ -55,7 +57,7 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
         img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
         # Determine which model to use
-        vision_llm = f"meta-llama/{model}-Instruct-Turbo" if model != "free" else "meta-llama/Llama-Vision-Free"
+        vision_llm = f"meta-llama/{model}" if model != "free" else "meta-llama/Llama-Vision-Free"
         
         # System prompt for OCR - structured for table output
         system_prompt = """
@@ -96,14 +98,20 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             "model": vision_llm,
             "messages": [
                 {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": system_prompt},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
                     ]
                 }
             ]
         }
+        
+        # Add debug information
+        st.write(f"Using model: {vision_llm}")
         
         # Convert payload to JSON with ASCII encoding
         json_payload = json.dumps(payload, ensure_ascii=True)
@@ -114,6 +122,16 @@ def process_with_llama_vision(image, api_key, model="Llama-3.2-90B-Vision"):
             headers=headers,
             data=json_payload
         )
+        
+        # Add debug information
+        st.write(f"API Status Code: {response.status_code}")
+        
+        # Check for error response and display details
+        if response.status_code != 200:
+            st.error(f"API Error: {response.status_code}")
+            st.error(f"Response: {response.text}")
+            return f"Error: API returned status code {response.status_code}. Response: {response.text}"
+        
         response.raise_for_status()  # Raise exception for HTTP errors
         
         result = response.json()
@@ -174,62 +192,15 @@ if uploaded_file is not None:
         
         st.subheader("OCR Result:")
         
-        # Process with selected OCR method
-        if ocr_method == "Llama 3.2 Vision":
-            if st.button("Process with Llama Vision", type="primary"):
-                if not together_api_key:
-                    st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
-                else:
-                    with st.spinner("Processing with Llama Vision..."):
-                        result = process_with_llama_vision(image_to_ocr, together_api_key, llama_model)
-                        st.markdown(result)
-        
-        elif ocr_method == "EasyOCR":
-            if st.button("Process with EasyOCR"):
-                with st.spinner("Processing with EasyOCR..."):
-                    try:
-                        image_np = np.array(image_to_ocr)
-                        import easyocr
-                        reader = easyocr.Reader(['en'])
-                        results = reader.readtext(image_np, detail=0)
-                        
-                        if results:
-                            # Format results as a table
-                            table_content = "| Text Detected |\n| --- |\n"
-                            for text in results:
-                                table_content += f"| {text} |\n"
-                            st.markdown(table_content)
-                        else:
-                            st.warning("No text detected. Try adjusting the image or using a different OCR method.")
-                    except Exception as e:
-                        st.error(f"Error during EasyOCR processing: {e}")
-        
-        elif ocr_method == "PaddleOCR":
-            if st.button("Process with PaddleOCR"):
-                with st.spinner("Processing with PaddleOCR..."):
-                    try:
-                        image_np = np.array(image_to_ocr)
-                        image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-                        from paddleocr import PaddleOCR
-                        ocr = PaddleOCR(use_angle_cls=True, lang='en')
-                        results = ocr.ocr(image_cv, cls=True)
-                        
-                        if results and any(results):
-                            # Format results as a table
-                            table_content = "| Text Detected | Confidence |\n| --- | --- |\n"
-                            for line in results:
-                                if line:  # Check if line is not empty
-                                    for word_info in line:
-                                        if isinstance(word_info, list) and len(word_info) > 1:
-                                            text = word_info[1][0]  # Updated to handle PaddleOCR's output structure
-                                            confidence = word_info[1][1]
-                                            table_content += f"| {text} | {confidence:.2f} |\n"
-                            st.markdown(table_content)
-                        else:
-                            st.warning("No text detected. Try adjusting the image or using a different OCR method.")
-                    except Exception as e:
-                        st.error(f"Error during PaddleOCR processing: {e}")
-    
+        # Process with Llama Vision
+        if st.button("Process with Llama Vision", type="primary"):
+            if not together_api_key:
+                st.error("TOGETHER_API_KEY not found in environment variables. Please set it before running the app.")
+            else:
+                with st.spinner("Processing with Llama Vision..."):
+                    result = process_with_llama_vision(image_to_ocr, together_api_key, llama_model)
+                    st.markdown(result)
+                    
     except Exception as e:
         st.error(f"An error occurred: {e}")
         st.info("Please ensure you've uploaded a valid image file.")
